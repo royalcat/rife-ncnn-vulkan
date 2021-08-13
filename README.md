@@ -73,22 +73,22 @@ Usage: rife-ncnn-vulkan -0 infile -1 infile1 -o outfile [options]...
 
   -h                   show this help
   -v                   verbose output
-  -0 input0-path       input image0 path (jpg/png/webp)
-  -1 input1-path       input image1 path (jpg/png/webp)
-  -i input-path        input image directory (jpg/png/webp)
-  -o output-path       output image path (jpg/png/webp) or directory
+  -0 input0-path       input image0 path (jpg/png)
+  -1 input1-path       input image1 path (jpg/png)
+  -i input-path        input image directory (jpg/png)
+  -o output-path       output image path (jpg/png) or directory
   -m model-path        rife model path (default=rife-HD)
   -g gpu-id            gpu device to use (-1=cpu, default=auto) can be 0,1,2 for multi-gpu
   -j load:proc:save    thread count for load/proc/save (default=1:2:2) can be 1:2,2,2:2 for multi-gpu
   -x                   enable tta mode
   -u                   enable UHD mode
-  -f pattern-format    output image filename pattern format (%08d.jpg/png/webp, default=ext/%08d.png)
+  -f pattern-format    output image filename pattern format (%08d.jpg/png, default=ext/%08d.png)
 ```
 
 - `input0-path`, `input1-path` and `output-path` accept file path
 - `input-path` and `output-path` accept file directory
 - `load:proc:save` = thread count for the three stages (image decoding + rife interpolation + image encoding), using larger values may increase GPU usage and consume more GPU memory. You can tune this configuration with "4:4:4" for many small-size images, and "2:2:2" for large-size images. The default setting usually works fine for most situations. If you find that your GPU is hungry, try increasing thread count to achieve faster processing.
-- `pattern-format` = the filename pattern and format of the image to be output, png is better supported, however webp generally yields smaller file sizes, both are losslessly encoded
+- `pattern-format` = the filename pattern and format of the image to be output.
 
 If you encounter a crash or error, try upgrading your GPU driver:
 
@@ -176,6 +176,5 @@ rife-ncnn-vulkan.exe -m models/rife-anime -x -0 0.png -1 1.png -o out.png
 ## Other Open-Source Code Used
 
 - https://github.com/Tencent/ncnn for fast neural network inference on ALL PLATFORMS
-- https://github.com/webmproject/libwebp for encoding and decoding Webp images on ALL PLATFORMS
 - https://github.com/nothings/stb for decoding and encoding image on Linux / MacOS
 - https://github.com/tronkko/dirent for listing files in directory on Windows
