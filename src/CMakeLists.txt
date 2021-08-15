@@ -8,6 +8,8 @@ cmake_minimum_required(VERSION 3.9)
 
 set(CMAKE_BUILD_TYPE Release)
 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -Ofast -flto")
+
 option(USE_SYSTEM_NCNN "build with system libncnn" OFF)
 option(USE_STATIC_MOLTENVK "link moltenvk static library" OFF)
 
@@ -21,7 +23,7 @@ macro(rife_add_shader SHADER_SRC)
 
     add_custom_command(
         OUTPUT ${SHADER_COMP_HEADER}
-        COMMAND ${CMAKE_COMMAND} -DSHADER_SRC=${CMAKE_CURRENT_SOURCE_DIR}/${SHADER_SRC} -DSHADER_COMP_HEADER=${SHADER_COMP_HEADER} -P "${CMAKE_CURRENT_SOURCE_DIR}/generate_shader_comp_header.cmake"
+        COMMAND ${CMAKE_COMMAND} -DSHADER_SRC=${CMAKE_CURRENT_SOURCE_DIR}/${SHADER_SRC} -DSHADER_COMP_HEADER=${SHADER_COMP_HEADER} -P "${CMAKE_CURRENT_SOURCE_DIR}/shaders/generate_shader_comp_header.cmake"
         DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${SHADER_SRC}
         COMMENT "Preprocessing shader source ${SHADER_SRC_NAME_WE}.comp"
         VERBATIM
@@ -189,18 +191,18 @@ if(NOT USE_SYSTEM_NCNN)
     add_subdirectory(ncnn)
 endif()
 
-rife_add_shader(rife_preproc.comp)
-rife_add_shader(rife_postproc.comp)
-rife_add_shader(rife_preproc_tta.comp)
-rife_add_shader(rife_postproc_tta.comp)
-rife_add_shader(rife_flow_tta_avg.comp)
-rife_add_shader(rife_v2_flow_tta_avg.comp)
-rife_add_shader(rife_flow_tta_temporal_avg.comp)
-rife_add_shader(rife_v2_flow_tta_temporal_avg.comp)
-rife_add_shader(rife_out_tta_temporal_avg.comp)
-rife_add_shader(warp.comp)
-rife_add_shader(warp_pack4.comp)
-rife_add_shader(warp_pack8.comp)
+rife_add_shader(shaders/rife_preproc.comp)
+rife_add_shader(shaders/rife_postproc.comp)
+rife_add_shader(shaders/rife_preproc_tta.comp)
+rife_add_shader(shaders/rife_postproc_tta.comp)
+rife_add_shader(shaders/rife_flow_tta_avg.comp)
+rife_add_shader(shaders/rife_v2_flow_tta_avg.comp)
+rife_add_shader(shaders/rife_flow_tta_temporal_avg.comp)
+rife_add_shader(shaders/rife_v2_flow_tta_temporal_avg.comp)
+rife_add_shader(shaders/rife_out_tta_temporal_avg.comp)
+rife_add_shader(shaders/warp.comp)
+rife_add_shader(shaders/warp_pack4.comp)
+rife_add_shader(shaders/warp_pack8.comp)
 
 add_custom_target(generate-spirv DEPENDS ${SHADER_SPV_HEX_FILES})
 

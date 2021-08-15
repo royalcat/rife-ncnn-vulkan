@@ -104,6 +104,7 @@ static void print_usage()
     fprintf(stderr, "       rife-ncnn-vulkan -i indir -o outdir [options]...\n\n");
     fprintf(stderr, "  -h                   show this help\n");
     fprintf(stderr, "  -v                   verbose output\n");
+    fprintf(stderr, "  -d                   only generated pictures in output dir\n");
     fprintf(stderr, "  -0 input0-path       input image0 path (jpg/png)\n");
     fprintf(stderr, "  -1 input1-path       input image1 path (jpg/png)\n");
     fprintf(stderr, "  -i input-path        input image directory (jpg/png)\n");
@@ -351,6 +352,7 @@ class SaveThreadParams
 {
 public:
     int verbose;
+    bool duplicate_input = false;
 };
 
 void *save(void *args)
@@ -369,25 +371,28 @@ void *save(void *args)
 
         int ret = encode_image(v.outpath, v.outimage);
 
+        if (stp->duplicate_input)
+        {
+            {
+                unsigned char *pixeldata = (unsigned char *)v.in0image.data;
+
+#if _WIN32
+                free(pixeldata);
+#else
+                stbi_image_free(pixeldata);
+#endif
+            }
+            {
+                unsigned char *pixeldata = (unsigned char *)v.in1image.data;
+
+#if _WIN32
+                free(pixeldata);
+#else
+                stbi_image_free(pixeldata);
+#endif
+            }
+        }
         // free input pixel data
-        {
-            unsigned char *pixeldata = (unsigned char *)v.in0image.data;
-
-#if _WIN32
-            free(pixeldata);
-#else
-            stbi_image_free(pixeldata);
-#endif
-        }
-        {
-            unsigned char *pixeldata = (unsigned char *)v.in1image.data;
-
-#if _WIN32
-            free(pixeldata);
-#else
-            stbi_image_free(pixeldata);
-#endif
-        }
 
         if (ret == 0)
         {
@@ -423,6 +428,7 @@ int main(int argc, char **argv)
     int verbose = 0;
     int tta_mode = 0;
     int uhd_mode = 0;
+    bool duplicate_input = true;
     path_t pattern_format = PATHSTR("%08d.png");
 
 #if _WIN32
@@ -465,6 +471,9 @@ int main(int argc, char **argv)
             break;
         case L'u':
             uhd_mode = 1;
+            break;
+        case L'd':
+            duplicate_input = false;
             break;
         case L'h':
         default:
@@ -511,6 +520,9 @@ int main(int argc, char **argv)
             break;
         case 'u':
             uhd_mode = 1;
+            break;
+        case L'd':
+            duplicate_input = false;
             break;
         case 'h':
         default:
