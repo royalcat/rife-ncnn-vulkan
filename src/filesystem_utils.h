@@ -1,19 +1,19 @@
 #ifndef FILESYSTEM_UTILS_H
 #define FILESYSTEM_UTILS_H
 
-#include <stdio.h>
-#include <vector>
-#include <string>
 #include <algorithm>
+#include <stdio.h>
+#include <string>
+#include <vector>
 
 #if _WIN32
-#include <windows.h>
 #include "win32dirent.h"
+#include <windows.h>
 #else // _WIN32
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
 #include <dirent.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 #endif // _WIN32
 
 #if _WIN32
@@ -56,7 +56,7 @@ static int list_directory(const path_t& dirpath, std::vector<path_t>& imagepaths
 
     return 0;
 }
-#else // _WIN32
+#else  // _WIN32
 static bool path_is_directory(const path_t& path)
 {
     struct stat s;
@@ -121,7 +121,7 @@ static path_t get_executable_directory()
 
     return path_t(filepath);
 }
-#else // _WIN32
+#else  // _WIN32
 static path_t get_executable_directory()
 {
     char filepath[256];
@@ -138,7 +138,7 @@ static bool filepath_is_readable(const path_t& path)
 {
 #if _WIN32
     FILE* fp = _wfopen(path.c_str(), L"rb");
-#else // _WIN32
+#else  // _WIN32
     FILE* fp = fopen(path.c_str(), "rb");
 #endif // _WIN32
     if (!fp)

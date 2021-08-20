@@ -4,19 +4,19 @@
 
 #include <algorithm>
 #include <vector>
+
 #include "benchmark.h"
-
-#include "rife_preproc.comp.hex.h"
-#include "rife_postproc.comp.hex.h"
-#include "rife_preproc_tta.comp.hex.h"
-#include "rife_postproc_tta.comp.hex.h"
+#include "filesystem_utils.h"
 #include "rife_flow_tta_avg.comp.hex.h"
-#include "rife_v2_flow_tta_avg.comp.hex.h"
 #include "rife_flow_tta_temporal_avg.comp.hex.h"
-#include "rife_v2_flow_tta_temporal_avg.comp.hex.h"
-#include "rife_out_tta_temporal_avg.comp.hex.h"
-
 #include "rife_ops.h"
+#include "rife_out_tta_temporal_avg.comp.hex.h"
+#include "rife_postproc.comp.hex.h"
+#include "rife_postproc_tta.comp.hex.h"
+#include "rife_preproc.comp.hex.h"
+#include "rife_preproc_tta.comp.hex.h"
+#include "rife_v2_flow_tta_avg.comp.hex.h"
+#include "rife_v2_flow_tta_temporal_avg.comp.hex.h"
 
 DEFINE_LAYER_CREATOR(Warp)
 
@@ -70,39 +70,8 @@ RIFE::~RIFE()
     }
 }
 
-#if _WIN32
-static void load_param_model(ncnn::Net& net, const std::wstring& modeldir, const wchar_t* name)
-{
-    wchar_t parampath[256];
-    wchar_t modelpath[256];
-    swprintf(parampath, 256, L"%s/%s.param", modeldir.c_str(), name);
-    swprintf(modelpath, 256, L"%s/%s.bin", modeldir.c_str(), name);
-
-    {
-        FILE* fp = _wfopen(parampath, L"rb");
-        if (!fp)
-        {
-            fwprintf(stderr, L"_wfopen %ls failed\n", parampath);
-        }
-
-        net.load_param(fp);
-
-        fclose(fp);
-    }
-    {
-        FILE* fp = _wfopen(modelpath, L"rb");
-        if (!fp)
-        {
-            fwprintf(stderr, L"_wfopen %ls failed\n", modelpath);
-        }
-
-        net.load_model(fp);
-
-        fclose(fp);
-    }
-}
-#else
-static void load_param_model(ncnn::Net& net, const std::string& modeldir, const char* name)
+static void
+load_param_model(ncnn::Net& net, const path_t& modeldir, const char* name)
 {
     char parampath[256];
     char modelpath[256];
@@ -112,13 +81,8 @@ static void load_param_model(ncnn::Net& net, const std::string& modeldir, const 
     net.load_param(parampath);
     net.load_model(modelpath);
 }
-#endif
 
-#if _WIN32
-int RIFE::load(const std::wstring& modeldir)
-#else
-int RIFE::load(const std::string& modeldir)
-#endif
+int RIFE::load(const path_t& modeldir)
 {
     ncnn::Option opt;
     opt.num_threads = num_threads;
@@ -140,15 +104,9 @@ int RIFE::load(const std::string& modeldir)
     contextnet.register_custom_layer("rife.Warp", Warp_layer_creator);
     fusionnet.register_custom_layer("rife.Warp", Warp_layer_creator);
 
-#if _WIN32
-    load_param_model(flownet, modeldir, L"flownet");
-    load_param_model(contextnet, modeldir, L"contextnet");
-    load_param_model(fusionnet, modeldir, L"fusionnet");
-#else
-    load_param_model(flownet, modeldir, "flownet");
-    load_param_model(contextnet, modeldir, "contextnet");
-    load_param_model(fusionnet, modeldir, "fusionnet");
-#endif
+    load_param_model(flownet, modeldir, PATHSTR("flownet"));
+    load_param_model(contextnet, modeldir, PATHSTR("contextnet"));
+    load_param_model(fusionnet, modeldir, PATHSTR("fusionnet"));
 
     // initialize preprocess and postprocess pipeline
     if (vkdev)
@@ -277,7 +235,7 @@ int RIFE::load(const std::string& modeldir)
             rife_uhd_downscale_image->vkdev = vkdev;
 
             ncnn::ParamDict pd;
-            pd.set(0, 2);// bilinear
+            pd.set(0, 2); // bilinear
             pd.set(1, 0.5f);
             pd.set(2, 0.5f);
             rife_uhd_downscale_image->load_param(pd);
@@ -289,7 +247,7 @@ int RIFE::load(const std::string& modeldir)
             rife_uhd_upscale_flow->vkdev = vkdev;
 
             ncnn::ParamDict pd;
-            pd.set(0, 2);// bilinear
+            pd.set(0, 2); // bilinear
             pd.set(1, 2.f);
             pd.set(2, 2.f);
             rife_uhd_upscale_flow->load_param(pd);
@@ -301,9 +259,9 @@ int RIFE::load(const std::string& modeldir)
             rife_uhd_double_flow->vkdev = vkdev;
 
             ncnn::ParamDict pd;
-            pd.set(0, 2);// mul
-            pd.set(1, 1);// with_scalar
-            pd.set(2, 2.f);// b
+            pd.set(0, 2);   // mul
+            pd.set(1, 1);   // with_scalar
+            pd.set(2, 2.f); // b
             rife_uhd_double_flow->load_param(pd);
 
             rife_uhd_double_flow->create_pipeline(opt);
@@ -321,7 +279,7 @@ int RIFE::load(const std::string& modeldir)
 
             ncnn::ParamDict pd;
             pd.set(0, slice_points);
-            pd.set(1, 0);// axis
+            pd.set(1, 0); // axis
 
             rife_v2_slice_flow->load_param(pd);
 
@@ -332,7 +290,7 @@ int RIFE::load(const std::string& modeldir)
     return 0;
 }
 
-int RIFE::process(const ncnn::Mat& in0image, const ncnn::Mat& in1image, float timestep, ncnn::Mat& outimage) const
+int RIFE::process(const ncnn::Mat& in0image, const ncnn::Mat& in1image, const float timestep, ncnn::Mat& outimage) const
 {
     if (!vkdev)
     {
@@ -356,9 +314,20 @@ int RIFE::process(const ncnn::Mat& in0image, const ncnn::Mat& in1image, float ti
     const unsigned char* pixel1data = (const unsigned char*)in1image.data;
     const int w = in0image.w;
     const int h = in0image.h;
-    const int channels = 3;//in0image.elempack;
 
-//     fprintf(stderr, "%d x %d\n", w, h);
+    return process(pixel0data, pixel1data, w, h, timestep, (unsigned char*)outimage.data);
+}
+
+int RIFE::process(const unsigned char* pixel0data,
+                  const unsigned char* pixel1data,
+                  const int w,
+                  const int h,
+                  const float timestep,
+                  unsigned char* outpixel) const
+{
+    const int channels = 3; //in0image.elempack;
+
+    //     fprintf(stderr, "%d x %d\n", w, h);
 
     ncnn::VkAllocator* blob_vkallocator = vkdev->acquire_blob_allocator();
     ncnn::VkAllocator* staging_vkallocator = vkdev->acquire_staging_allocator();
@@ -1136,7 +1105,7 @@ int RIFE::process(const ncnn::Mat& in0image, const ncnn::Mat& in1image, float ti
 
         if (opt.use_fp16_storage && opt.use_int8_storage)
         {
-            out = ncnn::Mat(out_gpu.w, out_gpu.h, (unsigned char*)outimage.data, (size_t)channels, 1);
+            out = ncnn::Mat(out_gpu.w, out_gpu.h, outpixel, (size_t)channels, 1);
         }
 
         cmd.record_clone(out_gpu, out, opt);
@@ -1146,9 +1115,9 @@ int RIFE::process(const ncnn::Mat& in0image, const ncnn::Mat& in1image, float ti
         if (!(opt.use_fp16_storage && opt.use_int8_storage))
         {
 #if _WIN32
-            out.to_pixels((unsigned char*)outimage.data, ncnn::Mat::PIXEL_RGB2BGR);
+            out.to_pixels(outpixel, ncnn::Mat::PIXEL_RGB2BGR);
 #else
-            out.to_pixels((unsigned char*)outimage.data, ncnn::Mat::PIXEL_RGB);
+            out.to_pixels(outpixel, ncnn::Mat::PIXEL_RGB);
 #endif
         }
     }
@@ -1177,9 +1146,20 @@ int RIFE::process_cpu(const ncnn::Mat& in0image, const ncnn::Mat& in1image, floa
     const unsigned char* pixel1data = (const unsigned char*)in1image.data;
     const int w = in0image.w;
     const int h = in0image.h;
-    const int channels = 3;//in0image.elempack;
 
-//     fprintf(stderr, "%d x %d\n", w, h);
+    return process_cpu(pixel0data, pixel1data, w, h, timestep, (unsigned char*)outimage.data);
+}
+
+int RIFE::process_cpu(const unsigned char* pixel0data,
+                      const unsigned char* pixel1data,
+                      const int w,
+                      const int h,
+                      const float timestep,
+                      unsigned char* outpixel) const
+{
+    const int channels = 3; //in0image.elempack;
+
+    //     fprintf(stderr, "%d x %d\n", w, h);
 
     ncnn::Option opt = flownet.opt;
 
@@ -2398,9 +2378,9 @@ int RIFE::process_cpu(const ncnn::Mat& in0image, const ncnn::Mat& in1image, floa
     // download
     {
 #if _WIN32
-        out.to_pixels((unsigned char*)outimage.data, ncnn::Mat::PIXEL_RGB2BGR);
+        out.to_pixels(outpixel, ncnn::Mat::PIXEL_RGB2BGR);
 #else
-        out.to_pixels((unsigned char*)outimage.data, ncnn::Mat::PIXEL_RGB);
+        out.to_pixels(outpixel, ncnn::Mat::PIXEL_RGB);
 #endif
     }
 

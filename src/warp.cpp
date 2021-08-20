@@ -107,7 +107,7 @@ int Warp::forward(const std::vector<Mat>& bottom_blobs, std::vector<Mat>& top_bl
     if (top_blob.empty())
         return -100;
 
-    #pragma omp parallel for num_threads(opt.num_threads)
+#pragma omp parallel for num_threads(opt.num_threads)
     for (int q = 0; q < channels; q++)
     {
         float* outptr = top_blob.channel(q);

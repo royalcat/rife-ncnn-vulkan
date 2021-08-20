@@ -21,8 +21,20 @@ public:
 #endif
 
     int process(const ncnn::Mat& in0image, const ncnn::Mat& in1image, float timestep, ncnn::Mat& outimage) const;
+    int process(const unsigned char* pixel0data,
+                const unsigned char* pixel1data,
+                const int w,
+                const int h,
+                const float timestep,
+                unsigned char* outimage) const;
 
     int process_cpu(const ncnn::Mat& in0image, const ncnn::Mat& in1image, float timestep, ncnn::Mat& outimage) const;
+    int process_cpu(const unsigned char* pixel0data,
+                    const unsigned char* pixel1data,
+                    const int w,
+                    const int h,
+                    const float timestep,
+                    unsigned char* outimage) const;
 
 private:
     ncnn::VulkanDevice* vkdev;

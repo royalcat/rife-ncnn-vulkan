@@ -239,3 +239,9 @@ if(USE_STATIC_MOLTENVK)
 endif()
 
 target_link_libraries(rife-ncnn-vulkan ${RIFE_LINK_LIBRARIES})
+
+#library
+add_library(rife-ncnn-vulkan-lib SHARED
+    lib.cpp
+)
+target_link_libraries(rife-ncnn-vulkan-lib ${RIFE_LINK_LIBRARIES})
