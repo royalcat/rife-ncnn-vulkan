@@ -9,9 +9,7 @@
 #include "platform.h"
 #include "rife.h"
 
-std::vector<RIFE *> rife;
-
-int init(RifeParameters params)
+EXPORT int init(RifeParameters params)
 {
     std::string model(params.model);
     bool rife_v2 = false;
@@ -49,13 +47,15 @@ int init(RifeParameters params)
 
     const int use_gpu_count = (int)gpuid.size();
 
+    NCNN_LOGE("start jobs alloc");
+
     std::vector<int> jobs_proc(params.job_proc, params.job_proc + params.job_proc_size);
     if (jobs_proc.empty())
     {
         jobs_proc.resize(use_gpu_count, 2);
     }
 
-    rife = std::vector<RIFE *>(use_gpu_count);
+    rife = std::vector<RIFE*>(use_gpu_count);
     for (int i = 0; i < use_gpu_count; i++)
     {
         int num_threads = gpuid[i] == -1 ? jobs_proc[i] : 1;
@@ -65,17 +65,18 @@ int init(RifeParameters params)
         rife[i]->load(modeldir);
     }
 
-    return 0;
+    return rife.size();
 }
 
-int process(const unsigned char *pixels0,
-            const unsigned char *pixels1,
-            unsigned char *outpixels,
-            int width, int height,
-            int pixels_type,
-            float timestep,
-            int gpuindex)
+EXPORT int process(const unsigned char* pixels0,
+                   const unsigned char* pixels1,
+                   unsigned char* outpixels,
+                   int width, int height,
+                   int pixels_type,
+                   float timestep,
+                   int gpuindex)
 {
+
     if (gpuindex > rife.size() - 1)
     {
         return -1;

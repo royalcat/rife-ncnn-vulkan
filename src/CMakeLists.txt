@@ -10,6 +10,7 @@ set(CMAKE_BUILD_TYPE Release)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -Ofast -flto")
 
+
 option(USE_SYSTEM_NCNN "build with system libncnn" OFF)
 option(USE_STATIC_MOLTENVK "link moltenvk static library" OFF)
 
@@ -206,14 +207,6 @@ rife_add_shader(shaders/warp_pack8.comp)
 
 add_custom_target(generate-spirv DEPENDS ${SHADER_SPV_HEX_FILES})
 
-add_executable(rife-ncnn-vulkan
-    main.cpp
-    rife.cpp
-    warp.cpp
-)
-
-add_dependencies(rife-ncnn-vulkan generate-spirv)
-
 set(RIFE_LINK_LIBRARIES ncnn ${Vulkan_LIBRARY})
 
 if(USE_STATIC_MOLTENVK)
@@ -238,10 +231,34 @@ if(USE_STATIC_MOLTENVK)
     )
 endif()
 
-target_link_libraries(rife-ncnn-vulkan ${RIFE_LINK_LIBRARIES})
+# add_executable(rife-ncnn-vulkan
+#     main.cpp
+#     rife.cpp
+#     warp.cpp
+# )
+
+# add_dependencies(rife-ncnn-vulkan generate-spirv)
+
+
+# target_link_libraries(rife-ncnn-vulkan ${RIFE_LINK_LIBRARIES})  
+
+
 
 #library
 add_library(rife-ncnn-vulkan-lib SHARED
     lib.cpp
+    main.cpp
+    rife.cpp
+    warp.cpp
 )
-target_link_libraries(rife-ncnn-vulkan-lib ${RIFE_LINK_LIBRARIES})
+
+set_target_properties(rife-ncnn-vulkan-lib PROPERTIES
+        POSITION_INDEPENDENT_CODE ON
+    )
+
+target_link_libraries(rife-ncnn-vulkan-lib
+    ${RIFE_LINK_LIBRARIES}
+)
+
+
+add_dependencies(rife-ncnn-vulkan-lib generate-spirv)
