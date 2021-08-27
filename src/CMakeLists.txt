@@ -231,16 +231,16 @@ if(USE_STATIC_MOLTENVK)
     )
 endif()
 
-# add_executable(rife-ncnn-vulkan
-#     main.cpp
-#     rife.cpp
-#     warp.cpp
-# )
+add_executable(rife-ncnn-vulkan
+    main.cpp
+    rife.cpp
+    warp.cpp
+)
 
-# add_dependencies(rife-ncnn-vulkan generate-spirv)
+add_dependencies(rife-ncnn-vulkan generate-spirv)
 
 
-# target_link_libraries(rife-ncnn-vulkan ${RIFE_LINK_LIBRARIES})  
+target_link_libraries(rife-ncnn-vulkan ${RIFE_LINK_LIBRARIES})  
 
 
 
