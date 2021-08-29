@@ -48,6 +48,11 @@ else()
     message(WARNING "IPO is not supported: ${ipo_supported_output}")
 endif()
 
+include(CheckCXXCompilerFlag)
+CHECK_CXX_COMPILER_FLAG("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
+if(COMPILER_SUPPORTS_MARCH_NATIVE)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")
+endif()
 
 if(USE_SYSTEM_NCNN)
     set(GLSLANG_TARGET_DIR "GLSLANG-NOTFOUND" CACHE PATH "Absolute path to glslangTargets.cmake directory")
@@ -240,19 +245,20 @@ target_link_libraries(rife-ncnn-vulkan ${RIFE_LINK_LIBRARIES})
 
 
 #library
-add_library(rife-ncnn-vulkan-lib SHARED
+add_library(lib-rife-ncnn-vulkan SHARED
     lib.cpp
     main.cpp
     rife.cpp
     warp.cpp
 )
 
-add_dependencies(rife-ncnn-vulkan-lib generate-spirv)
+add_dependencies(lib-rife-ncnn-vulkan generate-spirv)
 
-set_target_properties(rife-ncnn-vulkan-lib PROPERTIES
+set_target_properties(lib-rife-ncnn-vulkan PROPERTIES
         POSITION_INDEPENDENT_CODE ON
+        PREFIX ""  
     )
 
-target_link_libraries(rife-ncnn-vulkan-lib
+target_link_libraries(lib-rife-ncnn-vulkan
     ${RIFE_LINK_LIBRARIES}
 )
