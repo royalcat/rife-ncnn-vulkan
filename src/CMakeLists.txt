@@ -6,11 +6,6 @@ project(rife-ncnn-vulkan)
 
 cmake_minimum_required(VERSION 3.9)
 
-set(CMAKE_BUILD_TYPE Release)
-
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -Ofast -flto")
-
-
 option(USE_SYSTEM_NCNN "build with system libncnn" OFF)
 option(USE_STATIC_MOLTENVK "link moltenvk static library" OFF)
 
@@ -52,6 +47,7 @@ if(ipo_supported)
 else()
     message(WARNING "IPO is not supported: ${ipo_supported_output}")
 endif()
+
 
 if(USE_SYSTEM_NCNN)
     set(GLSLANG_TARGET_DIR "GLSLANG-NOTFOUND" CACHE PATH "Absolute path to glslangTargets.cmake directory")
@@ -239,7 +235,6 @@ add_executable(rife-ncnn-vulkan
 
 add_dependencies(rife-ncnn-vulkan generate-spirv)
 
-
 target_link_libraries(rife-ncnn-vulkan ${RIFE_LINK_LIBRARIES})  
 
 
@@ -252,6 +247,8 @@ add_library(rife-ncnn-vulkan-lib SHARED
     warp.cpp
 )
 
+add_dependencies(rife-ncnn-vulkan-lib generate-spirv)
+
 set_target_properties(rife-ncnn-vulkan-lib PROPERTIES
         POSITION_INDEPENDENT_CODE ON
     )
@@ -259,6 +256,3 @@ set_target_properties(rife-ncnn-vulkan-lib PROPERTIES
 target_link_libraries(rife-ncnn-vulkan-lib
     ${RIFE_LINK_LIBRARIES}
 )
-
-
-add_dependencies(rife-ncnn-vulkan-lib generate-spirv)
