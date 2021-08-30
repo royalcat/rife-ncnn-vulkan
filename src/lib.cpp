@@ -10,7 +10,7 @@
 #include "rife.h"
 
 EXPORT int init(RifeParameters params) {
-    std::string model(params.model);
+    path_t model(params.model);
     bool rife_v2 = false;
     if (model.find(PATHSTR("rife-v2")) != path_t::npos) {
         // fine
@@ -26,9 +26,6 @@ EXPORT int init(RifeParameters params) {
     }
     path_t modeldir = sanitize_dirpath(model);
 
-#if _WIN32
-    CoInitializeEx(NULL, COINIT_MULTITHREADED);
-#endif
     ncnn::create_gpu_instance();
 
     std::vector<int> gpuid;
