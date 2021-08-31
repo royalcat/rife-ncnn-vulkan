@@ -20,8 +20,7 @@
 
 DEFINE_LAYER_CREATOR(Warp)
 
-RIFE::RIFE(int gpuid, bool _tta_mode, bool _uhd_mode, int _num_threads, bool _rife_v2)
-{
+RIFE::RIFE(int gpuid, bool _tta_mode, bool _uhd_mode, int _num_threads, bool _rife_v2) {
     vkdev = gpuid == -1 ? 0 : ncnn::get_gpu_device(gpuid);
 
     rife_preproc = 0;
@@ -40,8 +39,7 @@ RIFE::RIFE(int gpuid, bool _tta_mode, bool _uhd_mode, int _num_threads, bool _ri
     rife_v2 = _rife_v2;
 }
 
-RIFE::~RIFE()
-{
+RIFE::~RIFE() {
     // cleanup preprocess and postprocess pipeline
     {
         delete rife_preproc;
@@ -51,8 +49,7 @@ RIFE::~RIFE()
         delete rife_out_tta_temporal_avg;
     }
 
-    if (uhd_mode)
-    {
+    if (uhd_mode) {
         rife_uhd_downscale_image->destroy_pipeline(flownet.opt);
         delete rife_uhd_downscale_image;
 
@@ -63,16 +60,42 @@ RIFE::~RIFE()
         delete rife_uhd_double_flow;
     }
 
-    if (rife_v2)
-    {
+    if (rife_v2) {
         rife_v2_slice_flow->destroy_pipeline(flownet.opt);
         delete rife_v2_slice_flow;
     }
 }
 
-static void
-load_param_model(ncnn::Net& net, const path_t& modeldir, const char* name)
-{
+#if _WIN32
+static void load_param_model(ncnn::Net& net, const std::wstring& modeldir, const wchar_t* name) {
+    wchar_t parampath[256];
+    wchar_t modelpath[256];
+    swprintf(parampath, 256, L"%s/%s.param", modeldir.c_str(), name);
+    swprintf(modelpath, 256, L"%s/%s.bin", modeldir.c_str(), name);
+
+    {
+        FILE* fp = _wfopen(parampath, L"rb");
+        if (!fp) {
+            fwprintf(stderr, L"_wfopen %ls failed\n", parampath);
+        }
+
+        net.load_param(fp);
+
+        fclose(fp);
+    }
+    {
+        FILE* fp = _wfopen(modelpath, L"rb");
+        if (!fp) {
+            fwprintf(stderr, L"_wfopen %ls failed\n", modelpath);
+        }
+
+        net.load_model(fp);
+
+        fclose(fp);
+    }
+}
+#else
+static void load_param_model(ncnn::Net& net, const std::string& modeldir, const char* name) {
     char parampath[256];
     char modelpath[256];
     sprintf(parampath, "%s/%s.param", modeldir.c_str(), name);
@@ -81,9 +104,9 @@ load_param_model(ncnn::Net& net, const path_t& modeldir, const char* name)
     net.load_param(parampath);
     net.load_model(modelpath);
 }
+#endif
 
-int RIFE::load(const path_t& modeldir)
-{
+int RIFE::load(const path_t& modeldir) {
     ncnn::Option opt;
     opt.num_threads = num_threads;
     opt.use_vulkan_compute = vkdev ? true : false;
@@ -109,8 +132,7 @@ int RIFE::load(const path_t& modeldir)
     load_param_model(fusionnet, modeldir, PATHSTR("fusionnet"));
 
     // initialize preprocess and postprocess pipeline
-    if (vkdev)
-    {
+    if (vkdev) {
         std::vector<ncnn::vk_specialization_type> specializations(1);
 #if _WIN32
         specializations[0].i = 1;
@@ -123,8 +145,7 @@ int RIFE::load(const path_t& modeldir)
             static ncnn::Mutex lock;
             {
                 ncnn::MutexLockGuard guard(lock);
-                if (spirv.empty())
-                {
+                if (spirv.empty()) {
                     if (tta_mode)
                         compile_spirv_module(rife_preproc_tta_comp_data, sizeof(rife_preproc_tta_comp_data), opt, spirv);
                     else
@@ -142,8 +163,7 @@ int RIFE::load(const path_t& modeldir)
             static ncnn::Mutex lock;
             {
                 ncnn::MutexLockGuard guard(lock);
-                if (spirv.empty())
-                {
+                if (spirv.empty()) {
                     if (tta_mode)
                         compile_spirv_module(rife_postproc_tta_comp_data, sizeof(rife_postproc_tta_comp_data), opt, spirv);
                     else
@@ -157,20 +177,15 @@ int RIFE::load(const path_t& modeldir)
         }
     }
 
-    if (vkdev && tta_mode)
-    {
+    if (vkdev && tta_mode) {
         static std::vector<uint32_t> spirv;
         static ncnn::Mutex lock;
         {
             ncnn::MutexLockGuard guard(lock);
-            if (spirv.empty())
-            {
-                if (rife_v2)
-                {
+            if (spirv.empty()) {
+                if (rife_v2) {
                     compile_spirv_module(rife_v2_flow_tta_avg_comp_data, sizeof(rife_v2_flow_tta_avg_comp_data), opt, spirv);
-                }
-                else
-                {
+                } else {
                     compile_spirv_module(rife_flow_tta_avg_comp_data, sizeof(rife_flow_tta_avg_comp_data), opt, spirv);
                 }
             }
@@ -183,20 +198,15 @@ int RIFE::load(const path_t& modeldir)
         rife_flow_tta_avg->create(spirv.data(), spirv.size() * 4, specializations);
     }
 
-    if (vkdev && tta_temporal_mode)
-    {
+    if (vkdev && tta_temporal_mode) {
         static std::vector<uint32_t> spirv;
         static ncnn::Mutex lock;
         {
             ncnn::MutexLockGuard guard(lock);
-            if (spirv.empty())
-            {
-                if (rife_v2)
-                {
+            if (spirv.empty()) {
+                if (rife_v2) {
                     compile_spirv_module(rife_v2_flow_tta_temporal_avg_comp_data, sizeof(rife_v2_flow_tta_temporal_avg_comp_data), opt, spirv);
-                }
-                else
-                {
+                } else {
                     compile_spirv_module(rife_flow_tta_temporal_avg_comp_data, sizeof(rife_flow_tta_temporal_avg_comp_data), opt, spirv);
                 }
             }
@@ -209,14 +219,12 @@ int RIFE::load(const path_t& modeldir)
         rife_flow_tta_temporal_avg->create(spirv.data(), spirv.size() * 4, specializations);
     }
 
-    if (vkdev && tta_temporal_mode)
-    {
+    if (vkdev && tta_temporal_mode) {
         static std::vector<uint32_t> spirv;
         static ncnn::Mutex lock;
         {
             ncnn::MutexLockGuard guard(lock);
-            if (spirv.empty())
-            {
+            if (spirv.empty()) {
                 compile_spirv_module(rife_out_tta_temporal_avg_comp_data, sizeof(rife_out_tta_temporal_avg_comp_data), opt, spirv);
             }
         }
@@ -228,14 +236,13 @@ int RIFE::load(const path_t& modeldir)
         rife_out_tta_temporal_avg->create(spirv.data(), spirv.size() * 4, specializations);
     }
 
-    if (uhd_mode)
-    {
+    if (uhd_mode) {
         {
             rife_uhd_downscale_image = ncnn::create_layer("Interp");
             rife_uhd_downscale_image->vkdev = vkdev;
 
             ncnn::ParamDict pd;
-            pd.set(0, 2); // bilinear
+            pd.set(0, 2);  // bilinear
             pd.set(1, 0.5f);
             pd.set(2, 0.5f);
             rife_uhd_downscale_image->load_param(pd);
@@ -247,7 +254,7 @@ int RIFE::load(const path_t& modeldir)
             rife_uhd_upscale_flow->vkdev = vkdev;
 
             ncnn::ParamDict pd;
-            pd.set(0, 2); // bilinear
+            pd.set(0, 2);  // bilinear
             pd.set(1, 2.f);
             pd.set(2, 2.f);
             rife_uhd_upscale_flow->load_param(pd);
@@ -259,17 +266,16 @@ int RIFE::load(const path_t& modeldir)
             rife_uhd_double_flow->vkdev = vkdev;
 
             ncnn::ParamDict pd;
-            pd.set(0, 2);   // mul
-            pd.set(1, 1);   // with_scalar
-            pd.set(2, 2.f); // b
+            pd.set(0, 2);    // mul
+            pd.set(1, 1);    // with_scalar
+            pd.set(2, 2.f);  // b
             rife_uhd_double_flow->load_param(pd);
 
             rife_uhd_double_flow->create_pipeline(opt);
         }
     }
 
-    if (rife_v2)
-    {
+    if (rife_v2) {
         {
             rife_v2_slice_flow = ncnn::create_layer("Slice");
             rife_v2_slice_flow->vkdev = vkdev;
@@ -279,7 +285,7 @@ int RIFE::load(const path_t& modeldir)
 
             ncnn::ParamDict pd;
             pd.set(0, slice_points);
-            pd.set(1, 0); // axis
+            pd.set(1, 0);  // axis
 
             rife_v2_slice_flow->load_param(pd);
 
@@ -290,22 +296,18 @@ int RIFE::load(const path_t& modeldir)
     return 0;
 }
 
-int RIFE::process(const ncnn::Mat& in0image, const ncnn::Mat& in1image, const float timestep, ncnn::Mat& outimage) const
-{
-    if (!vkdev)
-    {
+int RIFE::process(const ncnn::Mat& in0image, const ncnn::Mat& in1image, const float timestep, ncnn::Mat& outimage) const {
+    if (!vkdev) {
         // cpu only
         return process_cpu(in0image, in1image, timestep, outimage);
     }
 
-    if (timestep == 0.f)
-    {
+    if (timestep == 0.f) {
         outimage = in0image;
         return 0;
     }
 
-    if (timestep == 1.f)
-    {
+    if (timestep == 1.f) {
         outimage = in1image;
         return 0;
     }
@@ -323,9 +325,8 @@ int RIFE::process(const unsigned char* pixel0data,
                   const int w,
                   const int h,
                   const float timestep,
-                  unsigned char* outpixel) const
-{
-    const int channels = 3; //in0image.elempack;
+                  unsigned char* outpixel) const {
+    const int channels = 3;  //in0image.elempack;
 
     //     fprintf(stderr, "%d x %d\n", w, h);
 
@@ -345,13 +346,10 @@ int RIFE::process(const unsigned char* pixel0data,
 
     ncnn::Mat in0;
     ncnn::Mat in1;
-    if (opt.use_fp16_storage && opt.use_int8_storage)
-    {
+    if (opt.use_fp16_storage && opt.use_int8_storage) {
         in0 = ncnn::Mat(w, h, (unsigned char*)pixel0data, (size_t)channels, 1);
         in1 = ncnn::Mat(w, h, (unsigned char*)pixel1data, (size_t)channels, 1);
-    }
-    else
-    {
+    } else {
 #if _WIN32
         in0 = ncnn::Mat::from_pixels(pixel0data, ncnn::Mat::PIXEL_BGR2RGB, w, h);
         in1 = ncnn::Mat::from_pixels(pixel1data, ncnn::Mat::PIXEL_BGR2RGB, w, h);
@@ -373,8 +371,7 @@ int RIFE::process(const unsigned char* pixel0data,
 
     ncnn::VkMat out_gpu;
 
-    if (tta_mode)
-    {
+    if (tta_mode) {
         // preproc
         ncnn::VkMat in0_gpu_padded[8];
         ncnn::VkMat in1_gpu_padded[8];
@@ -442,16 +439,14 @@ int RIFE::process(const unsigned char* pixel0data,
         }
 
         ncnn::VkMat flow[8];
-        for (int ti = 0; ti < 8; ti++)
-        {
+        for (int ti = 0; ti < 8; ti++) {
             // flownet
             ncnn::Extractor ex = flownet.create_extractor();
             ex.set_blob_vkallocator(blob_vkallocator);
             ex.set_workspace_vkallocator(blob_vkallocator);
             ex.set_staging_vkallocator(staging_vkallocator);
 
-            if (uhd_mode)
-            {
+            if (uhd_mode) {
                 ncnn::VkMat in0_gpu_padded_downscaled;
                 ncnn::VkMat in1_gpu_padded_downscaled;
                 rife_uhd_downscale_image->forward(in0_gpu_padded[ti], in0_gpu_padded_downscaled, cmd, opt);
@@ -467,9 +462,7 @@ int RIFE::process(const unsigned char* pixel0data,
                 rife_uhd_upscale_flow->forward(flow_downscaled, flow_half, cmd, opt);
 
                 rife_uhd_double_flow->forward(flow_half, flow[ti], cmd, opt);
-            }
-            else
-            {
+            } else {
                 ex.input("input0", in0_gpu_padded[ti]);
                 ex.input("input1", in1_gpu_padded[ti]);
                 ex.extract("flow", flow[ti], cmd);
@@ -477,18 +470,15 @@ int RIFE::process(const unsigned char* pixel0data,
         }
 
         ncnn::VkMat flow_reversed[8];
-        if (tta_temporal_mode)
-        {
-            for (int ti = 0; ti < 8; ti++)
-            {
+        if (tta_temporal_mode) {
+            for (int ti = 0; ti < 8; ti++) {
                 // flownet
                 ncnn::Extractor ex = flownet.create_extractor();
                 ex.set_blob_vkallocator(blob_vkallocator);
                 ex.set_workspace_vkallocator(blob_vkallocator);
                 ex.set_staging_vkallocator(staging_vkallocator);
 
-                if (uhd_mode)
-                {
+                if (uhd_mode) {
                     ncnn::VkMat in0_gpu_padded_downscaled;
                     ncnn::VkMat in1_gpu_padded_downscaled;
                     rife_uhd_downscale_image->forward(in0_gpu_padded[ti], in0_gpu_padded_downscaled, cmd, opt);
@@ -504,9 +494,7 @@ int RIFE::process(const unsigned char* pixel0data,
                     rife_uhd_upscale_flow->forward(flow_downscaled, flow_half, cmd, opt);
 
                     rife_uhd_double_flow->forward(flow_half, flow_reversed[ti], cmd, opt);
-                }
-                else
-                {
+                } else {
                     ex.input("input0", in1_gpu_padded[ti]);
                     ex.input("input1", in0_gpu_padded[ti]);
                     ex.extract("flow", flow_reversed[ti], cmd);
@@ -540,8 +528,7 @@ int RIFE::process(const unsigned char* pixel0data,
             cmd.record_pipeline(rife_flow_tta_avg, bindings, constants, dispatcher);
         }
 
-        if (tta_temporal_mode)
-        {
+        if (tta_temporal_mode) {
             std::vector<ncnn::VkMat> bindings(8);
             bindings[0] = flow_reversed[0];
             bindings[1] = flow_reversed[1];
@@ -564,8 +551,7 @@ int RIFE::process(const unsigned char* pixel0data,
             cmd.record_pipeline(rife_flow_tta_avg, bindings, constants, dispatcher);
 
             // merge flow and flow_reversed
-            for (int ti = 0; ti < 8; ti++)
-            {
+            for (int ti = 0; ti < 8; ti++) {
                 std::vector<ncnn::VkMat> bindings(2);
                 bindings[0] = flow[ti];
                 bindings[1] = flow_reversed[ti];
@@ -584,10 +570,8 @@ int RIFE::process(const unsigned char* pixel0data,
             }
         }
 
-        if (rife_v2)
-        {
-            for (int ti = 0; ti < 8; ti++)
-            {
+        if (rife_v2) {
+            for (int ti = 0; ti < 8; ti++) {
                 std::vector<ncnn::VkMat> inputs(1);
                 inputs[0] = flow[ti];
                 std::vector<ncnn::VkMat> outputs(2);
@@ -598,8 +582,7 @@ int RIFE::process(const unsigned char* pixel0data,
         }
 
         ncnn::VkMat out_gpu_padded[8];
-        for (int ti = 0; ti < 8; ti++)
-        {
+        for (int ti = 0; ti < 8; ti++) {
             // contextnet
             ncnn::VkMat ctx0[4];
             ncnn::VkMat ctx1[4];
@@ -610,12 +593,9 @@ int RIFE::process(const unsigned char* pixel0data,
                 ex.set_staging_vkallocator(staging_vkallocator);
 
                 ex.input("input.1", in0_gpu_padded[ti]);
-                if (rife_v2)
-                {
+                if (rife_v2) {
                     ex.input("flow.0", flow0[ti]);
-                }
-                else
-                {
+                } else {
                     ex.input("flow.0", flow[ti]);
                 }
                 ex.extract("f1", ctx0[0], cmd);
@@ -630,12 +610,9 @@ int RIFE::process(const unsigned char* pixel0data,
                 ex.set_staging_vkallocator(staging_vkallocator);
 
                 ex.input("input.1", in1_gpu_padded[ti]);
-                if (rife_v2)
-                {
+                if (rife_v2) {
                     ex.input("flow.0", flow1[ti]);
-                }
-                else
-                {
+                } else {
                     ex.input("flow.1", flow[ti]);
                 }
                 ex.extract("f1", ctx1[0], cmd);
@@ -664,15 +641,11 @@ int RIFE::process(const unsigned char* pixel0data,
                 ex.input("10", ctx1[3]);
 
                 // save some memory
-                if (!tta_temporal_mode)
-                {
-                    if (ti == 0)
-                    {
+                if (!tta_temporal_mode) {
+                    if (ti == 0) {
                         in0_gpu.release();
                         in1_gpu.release();
-                    }
-                    else
-                    {
+                    } else {
                         in0_gpu_padded[ti - 1].release();
                         in1_gpu_padded[ti - 1].release();
                     }
@@ -685,16 +658,14 @@ int RIFE::process(const unsigned char* pixel0data,
                     ctx1[2].release();
                     ctx1[3].release();
                 }
-                if (ti != 0)
-                {
+                if (ti != 0) {
                     flow[ti - 1].release();
                 }
 
                 ex.extract("output", out_gpu_padded[ti], cmd);
             }
 
-            if (tta_temporal_mode)
-            {
+            if (tta_temporal_mode) {
                 // fusionnet
                 ncnn::VkMat out_gpu_padded_reversed;
                 {
@@ -716,13 +687,10 @@ int RIFE::process(const unsigned char* pixel0data,
                     ex.input("10", ctx0[3]);
 
                     // save some memory
-                    if (ti == 0)
-                    {
+                    if (ti == 0) {
                         in0_gpu.release();
                         in1_gpu.release();
-                    }
-                    else
-                    {
+                    } else {
                         in0_gpu_padded[ti - 1].release();
                         in1_gpu_padded[ti - 1].release();
                         flow_reversed[ti - 1].release();
@@ -759,12 +727,9 @@ int RIFE::process(const unsigned char* pixel0data,
             }
         }
 
-        if (opt.use_fp16_storage && opt.use_int8_storage)
-        {
+        if (opt.use_fp16_storage && opt.use_int8_storage) {
             out_gpu.create(w, h, (size_t)channels, 1, blob_vkallocator);
-        }
-        else
-        {
+        } else {
             out_gpu.create(w, h, channels, (size_t)4u, 1, blob_vkallocator);
         }
 
@@ -791,9 +756,7 @@ int RIFE::process(const unsigned char* pixel0data,
 
             cmd.record_pipeline(rife_postproc, bindings, constants, out_gpu);
         }
-    }
-    else
-    {
+    } else {
         // preproc
         ncnn::VkMat in0_gpu_padded;
         ncnn::VkMat in1_gpu_padded;
@@ -842,8 +805,7 @@ int RIFE::process(const unsigned char* pixel0data,
             ex.set_workspace_vkallocator(blob_vkallocator);
             ex.set_staging_vkallocator(staging_vkallocator);
 
-            if (uhd_mode)
-            {
+            if (uhd_mode) {
                 ncnn::VkMat in0_gpu_padded_downscaled;
                 ncnn::VkMat in1_gpu_padded_downscaled;
                 rife_uhd_downscale_image->forward(in0_gpu_padded, in0_gpu_padded_downscaled, cmd, opt);
@@ -859,9 +821,7 @@ int RIFE::process(const unsigned char* pixel0data,
                 rife_uhd_upscale_flow->forward(flow_downscaled, flow_half, cmd, opt);
 
                 rife_uhd_double_flow->forward(flow_half, flow, cmd, opt);
-            }
-            else
-            {
+            } else {
                 ex.input("input0", in0_gpu_padded);
                 ex.input("input1", in1_gpu_padded);
                 ex.extract("flow", flow, cmd);
@@ -869,16 +829,14 @@ int RIFE::process(const unsigned char* pixel0data,
         }
 
         ncnn::VkMat flow_reversed;
-        if (tta_temporal_mode)
-        {
+        if (tta_temporal_mode) {
             // flownet
             ncnn::Extractor ex = flownet.create_extractor();
             ex.set_blob_vkallocator(blob_vkallocator);
             ex.set_workspace_vkallocator(blob_vkallocator);
             ex.set_staging_vkallocator(staging_vkallocator);
 
-            if (uhd_mode)
-            {
+            if (uhd_mode) {
                 ncnn::VkMat in0_gpu_padded_downscaled;
                 ncnn::VkMat in1_gpu_padded_downscaled;
                 rife_uhd_downscale_image->forward(in0_gpu_padded, in0_gpu_padded_downscaled, cmd, opt);
@@ -894,9 +852,7 @@ int RIFE::process(const unsigned char* pixel0data,
                 rife_uhd_upscale_flow->forward(flow_downscaled, flow_half, cmd, opt);
 
                 rife_uhd_double_flow->forward(flow_half, flow_reversed, cmd, opt);
-            }
-            else
-            {
+            } else {
                 ex.input("input0", in1_gpu_padded);
                 ex.input("input1", in0_gpu_padded);
                 ex.extract("flow", flow_reversed, cmd);
@@ -922,8 +878,7 @@ int RIFE::process(const unsigned char* pixel0data,
             }
         }
 
-        if (rife_v2)
-        {
+        if (rife_v2) {
             std::vector<ncnn::VkMat> inputs(1);
             inputs[0] = flow;
             std::vector<ncnn::VkMat> outputs(2);
@@ -942,12 +897,9 @@ int RIFE::process(const unsigned char* pixel0data,
             ex.set_staging_vkallocator(staging_vkallocator);
 
             ex.input("input.1", in0_gpu_padded);
-            if (rife_v2)
-            {
+            if (rife_v2) {
                 ex.input("flow.0", flow0);
-            }
-            else
-            {
+            } else {
                 ex.input("flow.0", flow);
             }
             ex.extract("f1", ctx0[0], cmd);
@@ -962,12 +914,9 @@ int RIFE::process(const unsigned char* pixel0data,
             ex.set_staging_vkallocator(staging_vkallocator);
 
             ex.input("input.1", in1_gpu_padded);
-            if (rife_v2)
-            {
+            if (rife_v2) {
                 ex.input("flow.0", flow1);
-            }
-            else
-            {
+            } else {
                 ex.input("flow.1", flow);
             }
             ex.extract("f1", ctx1[0], cmd);
@@ -996,8 +945,7 @@ int RIFE::process(const unsigned char* pixel0data,
             ex.input("9", ctx1[2]);
             ex.input("10", ctx1[3]);
 
-            if (!tta_temporal_mode)
-            {
+            if (!tta_temporal_mode) {
                 // save some memory
                 in0_gpu.release();
                 in1_gpu.release();
@@ -1015,8 +963,7 @@ int RIFE::process(const unsigned char* pixel0data,
             ex.extract("output", out_gpu_padded, cmd);
         }
 
-        if (tta_temporal_mode)
-        {
+        if (tta_temporal_mode) {
             // fusionnet
             ncnn::VkMat out_gpu_padded_reversed;
             {
@@ -1072,12 +1019,9 @@ int RIFE::process(const unsigned char* pixel0data,
             }
         }
 
-        if (opt.use_fp16_storage && opt.use_int8_storage)
-        {
+        if (opt.use_fp16_storage && opt.use_int8_storage) {
             out_gpu.create(w, h, (size_t)channels, 1, blob_vkallocator);
-        }
-        else
-        {
+        } else {
             out_gpu.create(w, h, channels, (size_t)4u, 1, blob_vkallocator);
         }
 
@@ -1103,8 +1047,7 @@ int RIFE::process(const unsigned char* pixel0data,
     {
         ncnn::Mat out;
 
-        if (opt.use_fp16_storage && opt.use_int8_storage)
-        {
+        if (opt.use_fp16_storage && opt.use_int8_storage) {
             out = ncnn::Mat(out_gpu.w, out_gpu.h, outpixel, (size_t)channels, 1);
         }
 
@@ -1112,8 +1055,7 @@ int RIFE::process(const unsigned char* pixel0data,
 
         cmd.submit_and_wait();
 
-        if (!(opt.use_fp16_storage && opt.use_int8_storage))
-        {
+        if (!(opt.use_fp16_storage && opt.use_int8_storage)) {
 #if _WIN32
             out.to_pixels(outpixel, ncnn::Mat::PIXEL_RGB2BGR);
 #else
@@ -1128,16 +1070,13 @@ int RIFE::process(const unsigned char* pixel0data,
     return 0;
 }
 
-int RIFE::process_cpu(const ncnn::Mat& in0image, const ncnn::Mat& in1image, float timestep, ncnn::Mat& outimage) const
-{
-    if (timestep == 0.f)
-    {
+int RIFE::process_cpu(const ncnn::Mat& in0image, const ncnn::Mat& in1image, float timestep, ncnn::Mat& outimage) const {
+    if (timestep == 0.f) {
         outimage = in0image;
         return 0;
     }
 
-    if (timestep == 1.f)
-    {
+    if (timestep == 1.f) {
         outimage = in1image;
         return 0;
     }
@@ -1155,9 +1094,8 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
                       const int w,
                       const int h,
                       const float timestep,
-                      unsigned char* outpixel) const
-{
-    const int channels = 3; //in0image.elempack;
+                      unsigned char* outpixel) const {
+    const int channels = 3;  //in0image.elempack;
 
     //     fprintf(stderr, "%d x %d\n", w, h);
 
@@ -1181,36 +1119,29 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
 
     ncnn::Mat out;
 
-    if (tta_mode)
-    {
+    if (tta_mode) {
         // preproc and border padding
         ncnn::Mat in0_padded[8];
         ncnn::Mat in1_padded[8];
         {
             in0_padded[0].create(w_padded, h_padded, 3);
-            for (int q = 0; q < 3; q++)
-            {
+            for (int q = 0; q < 3; q++) {
                 float* outptr = in0_padded[0].channel(q);
 
                 int i = 0;
-                for (; i < h; i++)
-                {
+                for (; i < h; i++) {
                     const float* ptr = in0.channel(q).row(i);
 
                     int j = 0;
-                    for (; j < w; j++)
-                    {
+                    for (; j < w; j++) {
                         *outptr++ = *ptr++ * (1 / 255.f);
                     }
-                    for (; j < w_padded; j++)
-                    {
+                    for (; j < w_padded; j++) {
                         *outptr++ = 0.f;
                     }
                 }
-                for (; i < h_padded; i++)
-                {
-                    for (int j = 0; j < w_padded; j++)
-                    {
+                for (; i < h_padded; i++) {
+                    for (int j = 0; j < w_padded; j++) {
                         *outptr++ = 0.f;
                     }
                 }
@@ -1218,29 +1149,23 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
         }
         {
             in1_padded[0].create(w_padded, h_padded, 3);
-            for (int q = 0; q < 3; q++)
-            {
+            for (int q = 0; q < 3; q++) {
                 float* outptr = in1_padded[0].channel(q);
 
                 int i = 0;
-                for (; i < h; i++)
-                {
+                for (; i < h; i++) {
                     const float* ptr = in1.channel(q).row(i);
 
                     int j = 0;
-                    for (; j < w; j++)
-                    {
+                    for (; j < w; j++) {
                         *outptr++ = *ptr++ * (1 / 255.f);
                     }
-                    for (; j < w_padded; j++)
-                    {
+                    for (; j < w_padded; j++) {
                         *outptr++ = 0.f;
                     }
                 }
-                for (; i < h_padded; i++)
-                {
-                    for (int j = 0; j < w_padded; j++)
-                    {
+                for (; i < h_padded; i++) {
+                    for (int j = 0; j < w_padded; j++) {
                         *outptr++ = 0.f;
                     }
                 }
@@ -1257,8 +1182,7 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
             in0_padded[6].create(h_padded, w_padded, 3);
             in0_padded[7].create(h_padded, w_padded, 3);
 
-            for (int q = 0; q < 3; q++)
-            {
+            for (int q = 0; q < 3; q++) {
                 const ncnn::Mat in0_padded_0 = in0_padded[0].channel(q);
                 ncnn::Mat in0_padded_1 = in0_padded[1].channel(q);
                 ncnn::Mat in0_padded_2 = in0_padded[2].channel(q);
@@ -1268,15 +1192,13 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
                 ncnn::Mat in0_padded_6 = in0_padded[6].channel(q);
                 ncnn::Mat in0_padded_7 = in0_padded[7].channel(q);
 
-                for (int i = 0; i < h_padded; i++)
-                {
+                for (int i = 0; i < h_padded; i++) {
                     const float* outptr0 = in0_padded_0.row(i);
                     float* outptr1 = in0_padded_1.row(i) + w_padded - 1;
                     float* outptr2 = in0_padded_2.row(h_padded - 1 - i) + w_padded - 1;
                     float* outptr3 = in0_padded_3.row(h_padded - 1 - i);
 
-                    for (int j = 0; j < w_padded; j++)
-                    {
+                    for (int j = 0; j < w_padded; j++) {
                         float* outptr4 = in0_padded_4.row(j) + i;
                         float* outptr5 = in0_padded_5.row(j) + h_padded - 1 - i;
                         float* outptr6 = in0_padded_6.row(w_padded - 1 - j) + h_padded - 1 - i;
@@ -1304,8 +1226,7 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
             in1_padded[6].create(h_padded, w_padded, 3);
             in1_padded[7].create(h_padded, w_padded, 3);
 
-            for (int q = 0; q < 3; q++)
-            {
+            for (int q = 0; q < 3; q++) {
                 const ncnn::Mat in1_padded_0 = in1_padded[0].channel(q);
                 ncnn::Mat in1_padded_1 = in1_padded[1].channel(q);
                 ncnn::Mat in1_padded_2 = in1_padded[2].channel(q);
@@ -1315,15 +1236,13 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
                 ncnn::Mat in1_padded_6 = in1_padded[6].channel(q);
                 ncnn::Mat in1_padded_7 = in1_padded[7].channel(q);
 
-                for (int i = 0; i < h_padded; i++)
-                {
+                for (int i = 0; i < h_padded; i++) {
                     const float* outptr0 = in1_padded_0.row(i);
                     float* outptr1 = in1_padded_1.row(i) + w_padded - 1;
                     float* outptr2 = in1_padded_2.row(h_padded - 1 - i) + w_padded - 1;
                     float* outptr3 = in1_padded_3.row(h_padded - 1 - i);
 
-                    for (int j = 0; j < w_padded; j++)
-                    {
+                    for (int j = 0; j < w_padded; j++) {
                         float* outptr4 = in1_padded_4.row(j) + i;
                         float* outptr5 = in1_padded_5.row(j) + h_padded - 1 - i;
                         float* outptr6 = in1_padded_6.row(w_padded - 1 - j) + h_padded - 1 - i;
@@ -1344,14 +1263,12 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
         }
 
         ncnn::Mat flow[8];
-        for (int ti = 0; ti < 8; ti++)
-        {
+        for (int ti = 0; ti < 8; ti++) {
             // flownet
             {
                 ncnn::Extractor ex = flownet.create_extractor();
 
-                if (uhd_mode)
-                {
+                if (uhd_mode) {
                     ncnn::Mat in0_padded_downscaled;
                     ncnn::Mat in1_padded_downscaled;
                     rife_uhd_downscale_image->forward(in0_padded[ti], in0_padded_downscaled, opt);
@@ -1367,9 +1284,7 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
                     rife_uhd_upscale_flow->forward(flow_downscaled, flow_half, opt);
 
                     rife_uhd_double_flow->forward(flow_half, flow[ti], opt);
-                }
-                else
-                {
+                } else {
                     ex.input("input0", in0_padded[ti]);
                     ex.input("input1", in1_padded[ti]);
                     ex.extract("flow", flow[ti]);
@@ -1378,16 +1293,13 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
         }
 
         ncnn::Mat flow_reversed[8];
-        if (tta_temporal_mode)
-        {
-            for (int ti = 0; ti < 8; ti++)
-            {
+        if (tta_temporal_mode) {
+            for (int ti = 0; ti < 8; ti++) {
                 // flownet
                 {
                     ncnn::Extractor ex = flownet.create_extractor();
 
-                    if (uhd_mode)
-                    {
+                    if (uhd_mode) {
                         ncnn::Mat in0_padded_downscaled;
                         ncnn::Mat in1_padded_downscaled;
                         rife_uhd_downscale_image->forward(in0_padded[ti], in0_padded_downscaled, opt);
@@ -1403,9 +1315,7 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
                         rife_uhd_upscale_flow->forward(flow_downscaled, flow_half, opt);
 
                         rife_uhd_double_flow->forward(flow_half, flow_reversed[ti], opt);
-                    }
-                    else
-                    {
+                    } else {
                         ex.input("input0", in1_padded[ti]);
                         ex.input("input1", in0_padded[ti]);
                         ex.extract("flow", flow_reversed[ti]);
@@ -1419,17 +1329,14 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
                     float* flow_reversed_x = flow_reversed[ti].channel(0);
                     float* flow_reversed_y = flow_reversed[ti].channel(1);
 
-                    if (rife_v2)
-                    {
+                    if (rife_v2) {
                         float* flow_z = flow[ti].channel(2);
                         float* flow_w = flow[ti].channel(3);
                         float* flow_reversed_z = flow_reversed[ti].channel(2);
                         float* flow_reversed_w = flow_reversed[ti].channel(3);
 
-                        for (int i = 0; i < flow[ti].h; i++)
-                        {
-                            for (int j = 0; j < flow[ti].w; j++)
-                            {
+                        for (int i = 0; i < flow[ti].h; i++) {
+                            for (int j = 0; j < flow[ti].w; j++) {
                                 float x = (*flow_x + *flow_reversed_z) * 0.5f;
                                 float y = (*flow_y + *flow_reversed_w) * 0.5f;
                                 float z = (*flow_z + *flow_reversed_x) * 0.5f;
@@ -1445,13 +1352,9 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
                                 *flow_reversed_w++ = y;
                             }
                         }
-                    }
-                    else
-                    {
-                        for (int i = 0; i < flow[ti].h; i++)
-                        {
-                            for (int j = 0; j < flow[ti].w; j++)
-                            {
+                    } else {
+                        for (int i = 0; i < flow[ti].h; i++) {
+                            for (int j = 0; j < flow[ti].w; j++) {
                                 float x = (*flow_x - *flow_reversed_x) * 0.5f;
                                 float y = (*flow_y - *flow_reversed_y) * 0.5f;
 
@@ -1488,8 +1391,7 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
             ncnn::Mat flow_y6 = flow[6].channel(1);
             ncnn::Mat flow_y7 = flow[7].channel(1);
 
-            if (rife_v2)
-            {
+            if (rife_v2) {
                 ncnn::Mat flow_z0 = flow[0].channel(2);
                 ncnn::Mat flow_z1 = flow[1].channel(2);
                 ncnn::Mat flow_z2 = flow[2].channel(2);
@@ -1508,8 +1410,7 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
                 ncnn::Mat flow_w6 = flow[6].channel(3);
                 ncnn::Mat flow_w7 = flow[7].channel(3);
 
-                for (int i = 0; i < flow_x0.h; i++)
-                {
+                for (int i = 0; i < flow_x0.h; i++) {
                     float* x0 = flow_x0.row(i);
                     float* x1 = flow_x1.row(i) + flow_x0.w - 1;
                     float* x2 = flow_x2.row(flow_x0.h - 1 - i) + flow_x0.w - 1;
@@ -1530,8 +1431,7 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
                     float* w2 = flow_w2.row(flow_x0.h - 1 - i) + flow_x0.w - 1;
                     float* w3 = flow_w3.row(flow_x0.h - 1 - i);
 
-                    for (int j = 0; j < flow_x0.w; j++)
-                    {
+                    for (int j = 0; j < flow_x0.w; j++) {
                         float* x4 = flow_x4.row(j) + i;
                         float* x5 = flow_x5.row(j) + flow_x0.h - 1 - i;
                         float* x6 = flow_x6.row(flow_x0.w - 1 - j) + flow_x0.h - 1 - i;
@@ -1594,11 +1494,8 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
                         *w7 = -z;
                     }
                 }
-            }
-            else
-            {
-                for (int i = 0; i < flow_x0.h; i++)
-                {
+            } else {
+                for (int i = 0; i < flow_x0.h; i++) {
                     float* x0 = flow_x0.row(i);
                     float* x1 = flow_x1.row(i) + flow_x0.w - 1;
                     float* x2 = flow_x2.row(flow_x0.h - 1 - i) + flow_x0.w - 1;
@@ -1609,8 +1506,7 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
                     float* y2 = flow_y2.row(flow_x0.h - 1 - i) + flow_x0.w - 1;
                     float* y3 = flow_y3.row(flow_x0.h - 1 - i);
 
-                    for (int j = 0; j < flow_x0.w; j++)
-                    {
+                    for (int j = 0; j < flow_x0.w; j++) {
                         float* x4 = flow_x4.row(j) + i;
                         float* x5 = flow_x5.row(j) + flow_x0.h - 1 - i;
                         float* x6 = flow_x6.row(flow_x0.w - 1 - j) + flow_x0.h - 1 - i;
@@ -1646,8 +1542,7 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
             }
         }
 
-        if (tta_temporal_mode)
-        {
+        if (tta_temporal_mode) {
             ncnn::Mat flow_x0 = flow_reversed[0].channel(0);
             ncnn::Mat flow_x1 = flow_reversed[1].channel(0);
             ncnn::Mat flow_x2 = flow_reversed[2].channel(0);
@@ -1666,8 +1561,7 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
             ncnn::Mat flow_y6 = flow_reversed[6].channel(1);
             ncnn::Mat flow_y7 = flow_reversed[7].channel(1);
 
-            if (rife_v2)
-            {
+            if (rife_v2) {
                 ncnn::Mat flow_z0 = flow_reversed[0].channel(2);
                 ncnn::Mat flow_z1 = flow_reversed[1].channel(2);
                 ncnn::Mat flow_z2 = flow_reversed[2].channel(2);
@@ -1686,8 +1580,7 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
                 ncnn::Mat flow_w6 = flow_reversed[6].channel(3);
                 ncnn::Mat flow_w7 = flow_reversed[7].channel(3);
 
-                for (int i = 0; i < flow_x0.h; i++)
-                {
+                for (int i = 0; i < flow_x0.h; i++) {
                     float* x0 = flow_x0.row(i);
                     float* x1 = flow_x1.row(i) + flow_x0.w - 1;
                     float* x2 = flow_x2.row(flow_x0.h - 1 - i) + flow_x0.w - 1;
@@ -1708,8 +1601,7 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
                     float* w2 = flow_w2.row(flow_x0.h - 1 - i) + flow_x0.w - 1;
                     float* w3 = flow_w3.row(flow_x0.h - 1 - i);
 
-                    for (int j = 0; j < flow_x0.w; j++)
-                    {
+                    for (int j = 0; j < flow_x0.w; j++) {
                         float* x4 = flow_x4.row(j) + i;
                         float* x5 = flow_x5.row(j) + flow_x0.h - 1 - i;
                         float* x6 = flow_x6.row(flow_x0.w - 1 - j) + flow_x0.h - 1 - i;
@@ -1772,11 +1664,8 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
                         *w7 = -z;
                     }
                 }
-            }
-            else
-            {
-                for (int i = 0; i < flow_x0.h; i++)
-                {
+            } else {
+                for (int i = 0; i < flow_x0.h; i++) {
                     float* x0 = flow_x0.row(i);
                     float* x1 = flow_x1.row(i) + flow_x0.w - 1;
                     float* x2 = flow_x2.row(flow_x0.h - 1 - i) + flow_x0.w - 1;
@@ -1787,8 +1676,7 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
                     float* y2 = flow_y2.row(flow_x0.h - 1 - i) + flow_x0.w - 1;
                     float* y3 = flow_y3.row(flow_x0.h - 1 - i);
 
-                    for (int j = 0; j < flow_x0.w; j++)
-                    {
+                    for (int j = 0; j < flow_x0.w; j++) {
                         float* x4 = flow_x4.row(j) + i;
                         float* x5 = flow_x5.row(j) + flow_x0.h - 1 - i;
                         float* x6 = flow_x6.row(flow_x0.w - 1 - j) + flow_x0.h - 1 - i;
@@ -1824,24 +1712,20 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
             }
 
             // merge flow and flow_reversed
-            for (int ti = 0; ti < 8; ti++)
-            {
+            for (int ti = 0; ti < 8; ti++) {
                 float* flow_x = flow[ti].channel(0);
                 float* flow_y = flow[ti].channel(1);
                 float* flow_reversed_x = flow_reversed[ti].channel(0);
                 float* flow_reversed_y = flow_reversed[ti].channel(1);
 
-                if (rife_v2)
-                {
+                if (rife_v2) {
                     float* flow_z = flow[ti].channel(2);
                     float* flow_w = flow[ti].channel(3);
                     float* flow_reversed_z = flow_reversed[ti].channel(2);
                     float* flow_reversed_w = flow_reversed[ti].channel(3);
 
-                    for (int i = 0; i < flow[ti].h; i++)
-                    {
-                        for (int j = 0; j < flow[ti].w; j++)
-                        {
+                    for (int i = 0; i < flow[ti].h; i++) {
+                        for (int j = 0; j < flow[ti].w; j++) {
                             float x = (*flow_x + *flow_reversed_z) * 0.5f;
                             float y = (*flow_y + *flow_reversed_w) * 0.5f;
                             float z = (*flow_z + *flow_reversed_x) * 0.5f;
@@ -1857,13 +1741,9 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
                             *flow_reversed_w++ = y;
                         }
                     }
-                }
-                else
-                {
-                    for (int i = 0; i < flow[ti].h; i++)
-                    {
-                        for (int j = 0; j < flow[ti].w; j++)
-                        {
+                } else {
+                    for (int i = 0; i < flow[ti].h; i++) {
+                        for (int j = 0; j < flow[ti].w; j++) {
                             float x = (*flow_x - *flow_reversed_x) * 0.5f;
                             float y = (*flow_y - *flow_reversed_y) * 0.5f;
 
@@ -1877,10 +1757,8 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
             }
         }
 
-        if (rife_v2)
-        {
-            for (int ti = 0; ti < 8; ti++)
-            {
+        if (rife_v2) {
+            for (int ti = 0; ti < 8; ti++) {
                 std::vector<ncnn::Mat> inputs(1);
                 inputs[0] = flow[ti];
                 std::vector<ncnn::Mat> outputs(2);
@@ -1892,8 +1770,7 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
 
         ncnn::Mat out_padded[8];
         ncnn::Mat out_padded_reversed[8];
-        for (int ti = 0; ti < 8; ti++)
-        {
+        for (int ti = 0; ti < 8; ti++) {
             // contextnet
             ncnn::Mat ctx0[4];
             ncnn::Mat ctx1[4];
@@ -1901,12 +1778,9 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
                 ncnn::Extractor ex = contextnet.create_extractor();
 
                 ex.input("input.1", in0_padded[ti]);
-                if (rife_v2)
-                {
+                if (rife_v2) {
                     ex.input("flow.0", flow0[ti]);
-                }
-                else
-                {
+                } else {
                     ex.input("flow.0", flow[ti]);
                 }
                 ex.extract("f1", ctx0[0]);
@@ -1918,12 +1792,9 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
                 ncnn::Extractor ex = contextnet.create_extractor();
 
                 ex.input("input.1", in1_padded[ti]);
-                if (rife_v2)
-                {
+                if (rife_v2) {
                     ex.input("flow.0", flow1[ti]);
-                }
-                else
-                {
+                } else {
                     ex.input("flow.1", flow[ti]);
                 }
                 ex.extract("f1", ctx1[0]);
@@ -1951,8 +1822,7 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
                 ex.extract("output", out_padded[ti]);
             }
 
-            if (tta_temporal_mode)
-            {
+            if (tta_temporal_mode) {
                 // fusionnet
                 {
                     ncnn::Extractor ex = fusionnet.create_extractor();
@@ -1976,10 +1846,8 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
 
         // cut padding and postproc
         out.create(w, h, 3);
-        if (tta_temporal_mode)
-        {
-            for (int q = 0; q < 3; q++)
-            {
+        if (tta_temporal_mode) {
+            for (int q = 0; q < 3; q++) {
                 const ncnn::Mat out_padded_0 = out_padded[0].channel(q);
                 const ncnn::Mat out_padded_1 = out_padded[1].channel(q);
                 const ncnn::Mat out_padded_2 = out_padded[2].channel(q);
@@ -1998,8 +1866,7 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
                 const ncnn::Mat out_padded_reversed_7 = out_padded_reversed[7].channel(q);
                 float* outptr = out.channel(q);
 
-                for (int i = 0; i < h; i++)
-                {
+                for (int i = 0; i < h; i++) {
                     const float* ptr0 = out_padded_0.row(i);
                     const float* ptr1 = out_padded_1.row(i) + w_padded - 1;
                     const float* ptr2 = out_padded_2.row(h_padded - 1 - i) + w_padded - 1;
@@ -2009,8 +1876,7 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
                     const float* ptrr2 = out_padded_reversed_2.row(h_padded - 1 - i) + w_padded - 1;
                     const float* ptrr3 = out_padded_reversed_3.row(h_padded - 1 - i);
 
-                    for (int j = 0; j < w; j++)
-                    {
+                    for (int j = 0; j < w; j++) {
                         const float* ptr4 = out_padded_4.row(j) + i;
                         const float* ptr5 = out_padded_5.row(j) + h_padded - 1 - i;
                         const float* ptr6 = out_padded_6.row(w_padded - 1 - j) + h_padded - 1 - i;
@@ -2027,11 +1893,8 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
                     }
                 }
             }
-        }
-        else
-        {
-            for (int q = 0; q < 3; q++)
-            {
+        } else {
+            for (int q = 0; q < 3; q++) {
                 const ncnn::Mat out_padded_0 = out_padded[0].channel(q);
                 const ncnn::Mat out_padded_1 = out_padded[1].channel(q);
                 const ncnn::Mat out_padded_2 = out_padded[2].channel(q);
@@ -2042,15 +1905,13 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
                 const ncnn::Mat out_padded_7 = out_padded[7].channel(q);
                 float* outptr = out.channel(q);
 
-                for (int i = 0; i < h; i++)
-                {
+                for (int i = 0; i < h; i++) {
                     const float* ptr0 = out_padded_0.row(i);
                     const float* ptr1 = out_padded_1.row(i) + w_padded - 1;
                     const float* ptr2 = out_padded_2.row(h_padded - 1 - i) + w_padded - 1;
                     const float* ptr3 = out_padded_3.row(h_padded - 1 - i);
 
-                    for (int j = 0; j < w; j++)
-                    {
+                    for (int j = 0; j < w; j++) {
                         const float* ptr4 = out_padded_4.row(j) + i;
                         const float* ptr5 = out_padded_5.row(j) + h_padded - 1 - i;
                         const float* ptr6 = out_padded_6.row(w_padded - 1 - j) + h_padded - 1 - i;
@@ -2063,37 +1924,29 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
                 }
             }
         }
-    }
-    else
-    {
+    } else {
         // preproc and border padding
         ncnn::Mat in0_padded;
         ncnn::Mat in1_padded;
         {
             in0_padded.create(w_padded, h_padded, 3);
-            for (int q = 0; q < 3; q++)
-            {
+            for (int q = 0; q < 3; q++) {
                 float* outptr = in0_padded.channel(q);
 
                 int i = 0;
-                for (; i < h; i++)
-                {
+                for (; i < h; i++) {
                     const float* ptr = in0.channel(q).row(i);
 
                     int j = 0;
-                    for (; j < w; j++)
-                    {
+                    for (; j < w; j++) {
                         *outptr++ = *ptr++ * (1 / 255.f);
                     }
-                    for (; j < w_padded; j++)
-                    {
+                    for (; j < w_padded; j++) {
                         *outptr++ = 0.f;
                     }
                 }
-                for (; i < h_padded; i++)
-                {
-                    for (int j = 0; j < w_padded; j++)
-                    {
+                for (; i < h_padded; i++) {
+                    for (int j = 0; j < w_padded; j++) {
                         *outptr++ = 0.f;
                     }
                 }
@@ -2101,29 +1954,23 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
         }
         {
             in1_padded.create(w_padded, h_padded, 3);
-            for (int q = 0; q < 3; q++)
-            {
+            for (int q = 0; q < 3; q++) {
                 float* outptr = in1_padded.channel(q);
 
                 int i = 0;
-                for (; i < h; i++)
-                {
+                for (; i < h; i++) {
                     const float* ptr = in1.channel(q).row(i);
 
                     int j = 0;
-                    for (; j < w; j++)
-                    {
+                    for (; j < w; j++) {
                         *outptr++ = *ptr++ * (1 / 255.f);
                     }
-                    for (; j < w_padded; j++)
-                    {
+                    for (; j < w_padded; j++) {
                         *outptr++ = 0.f;
                     }
                 }
-                for (; i < h_padded; i++)
-                {
-                    for (int j = 0; j < w_padded; j++)
-                    {
+                for (; i < h_padded; i++) {
+                    for (int j = 0; j < w_padded; j++) {
                         *outptr++ = 0.f;
                     }
                 }
@@ -2137,8 +1984,7 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
         {
             ncnn::Extractor ex = flownet.create_extractor();
 
-            if (uhd_mode)
-            {
+            if (uhd_mode) {
                 ncnn::Mat in0_padded_downscaled;
                 ncnn::Mat in1_padded_downscaled;
                 rife_uhd_downscale_image->forward(in0_padded, in0_padded_downscaled, opt);
@@ -2154,9 +2000,7 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
                 rife_uhd_upscale_flow->forward(flow_downscaled, flow_half, opt);
 
                 rife_uhd_double_flow->forward(flow_half, flow, opt);
-            }
-            else
-            {
+            } else {
                 ex.input("input0", in0_padded);
                 ex.input("input1", in1_padded);
                 ex.extract("flow", flow);
@@ -2164,13 +2008,11 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
         }
 
         ncnn::Mat flow_reversed;
-        if (tta_temporal_mode)
-        {
+        if (tta_temporal_mode) {
             // flownet
             ncnn::Extractor ex = flownet.create_extractor();
 
-            if (uhd_mode)
-            {
+            if (uhd_mode) {
                 ncnn::Mat in0_padded_downscaled;
                 ncnn::Mat in1_padded_downscaled;
                 rife_uhd_downscale_image->forward(in0_padded, in0_padded_downscaled, opt);
@@ -2186,9 +2028,7 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
                 rife_uhd_upscale_flow->forward(flow_downscaled, flow_half, opt);
 
                 rife_uhd_double_flow->forward(flow_half, flow_reversed, opt);
-            }
-            else
-            {
+            } else {
                 ex.input("input0", in1_padded);
                 ex.input("input1", in0_padded);
                 ex.extract("flow", flow_reversed);
@@ -2201,17 +2041,14 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
                 float* flow_reversed_x = flow_reversed.channel(0);
                 float* flow_reversed_y = flow_reversed.channel(1);
 
-                if (rife_v2)
-                {
+                if (rife_v2) {
                     float* flow_z = flow.channel(2);
                     float* flow_w = flow.channel(3);
                     float* flow_reversed_z = flow_reversed.channel(2);
                     float* flow_reversed_w = flow_reversed.channel(3);
 
-                    for (int i = 0; i < flow.h; i++)
-                    {
-                        for (int j = 0; j < flow.w; j++)
-                        {
+                    for (int i = 0; i < flow.h; i++) {
+                        for (int j = 0; j < flow.w; j++) {
                             float x = (*flow_x + *flow_reversed_z) * 0.5f;
                             float y = (*flow_y + *flow_reversed_w) * 0.5f;
                             float z = (*flow_z + *flow_reversed_x) * 0.5f;
@@ -2227,13 +2064,9 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
                             *flow_reversed_w++ = y;
                         }
                     }
-                }
-                else
-                {
-                    for (int i = 0; i < flow.h; i++)
-                    {
-                        for (int j = 0; j < flow.w; j++)
-                        {
+                } else {
+                    for (int i = 0; i < flow.h; i++) {
+                        for (int j = 0; j < flow.w; j++) {
                             float x = (*flow_x - *flow_reversed_x) * 0.5f;
                             float y = (*flow_y - *flow_reversed_y) * 0.5f;
 
@@ -2247,8 +2080,7 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
             }
         }
 
-        if (rife_v2)
-        {
+        if (rife_v2) {
             std::vector<ncnn::Mat> inputs(1);
             inputs[0] = flow;
             std::vector<ncnn::Mat> outputs(2);
@@ -2264,12 +2096,9 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
             ncnn::Extractor ex = contextnet.create_extractor();
 
             ex.input("input.1", in0_padded);
-            if (rife_v2)
-            {
+            if (rife_v2) {
                 ex.input("flow.0", flow0);
-            }
-            else
-            {
+            } else {
                 ex.input("flow.0", flow);
             }
             ex.extract("f1", ctx0[0]);
@@ -2281,12 +2110,9 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
             ncnn::Extractor ex = contextnet.create_extractor();
 
             ex.input("input.1", in1_padded);
-            if (rife_v2)
-            {
+            if (rife_v2) {
                 ex.input("flow.0", flow1);
-            }
-            else
-            {
+            } else {
                 ex.input("flow.1", flow);
             }
             ex.extract("f1", ctx1[0]);
@@ -2316,8 +2142,7 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
         }
 
         ncnn::Mat out_padded_reversed;
-        if (tta_temporal_mode)
-        {
+        if (tta_temporal_mode) {
             // fusionnet
             {
                 ncnn::Extractor ex = fusionnet.create_extractor();
@@ -2340,34 +2165,25 @@ int RIFE::process_cpu(const unsigned char* pixel0data,
 
         // cut padding and postproc
         out.create(w, h, 3);
-        if (tta_temporal_mode)
-        {
-            for (int q = 0; q < 3; q++)
-            {
+        if (tta_temporal_mode) {
+            for (int q = 0; q < 3; q++) {
                 float* outptr = out.channel(q);
                 const float* ptr = out_padded.channel(q);
                 const float* ptr1 = out_padded_reversed.channel(q);
 
-                for (int i = 0; i < h; i++)
-                {
-                    for (int j = 0; j < w; j++)
-                    {
+                for (int i = 0; i < h; i++) {
+                    for (int j = 0; j < w; j++) {
                         *outptr++ = (*ptr++ + *ptr1++) * 0.5f * 255.f + 0.5f;
                     }
                 }
             }
-        }
-        else
-        {
-            for (int q = 0; q < 3; q++)
-            {
+        } else {
+            for (int q = 0; q < 3; q++) {
                 float* outptr = out.channel(q);
                 const float* ptr = out_padded.channel(q);
 
-                for (int i = 0; i < h; i++)
-                {
-                    for (int j = 0; j < w; j++)
-                    {
+                for (int i = 0; i < h; i++) {
+                    for (int j = 0; j < w; j++) {
                         *outptr++ = *ptr++ * 255.f + 0.5f;
                     }
                 }

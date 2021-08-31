@@ -7,34 +7,34 @@
 #include "platform.h"
 #include "rife.h"
 
+#if _WIN32
+#define EXPORT __declspec(dllexport)
+#define path_char wchar_t
+#else
 #define EXPORT __attribute__((visibility("default"))) __attribute__((used))
+#define path_char char
+#endif
 
-extern "C"
-{
-    struct RifeParameters
-    {
-        const char* model;
+extern "C" {
+struct RifeParameters {
+    const path_char* model;
 
-        const int* gpuids;
-        const int gpucount;
+    const int* gpuids;
+    const int gpucount;
 
-        const int* job_proc;
-        const int job_proc_size;
+    const int* job_proc;
+    const int job_proc_size;
 
-        const int verbose;
-        const int tta_mode;
-        const int uhd_mode;
-    };
+    const int verbose;
+    const int tta_mode;
+    const int uhd_mode;
+};
 
-    __attribute__((visibility("default"))) __attribute__((used)) static std::vector<RIFE*> rife;
+static std::vector<RIFE*> rife;
 
-    EXPORT extern int init(RifeParameters params);
+EXPORT int init(RifeParameters params);
 
-    EXPORT extern int process(const unsigned char* pixels0,
-                              const unsigned char* pixels1,
-                              unsigned char* outpixels,
-                              int width, int height,
-                              int pixels_type,
-                              float timestep,
-                              int gpuindex);
+EXPORT int process(const unsigned char* pixels0, const unsigned char* pixels1, unsigned char* outpixels,
+                   int width, int height, int pixels_type,
+                   float timestep, int gpuindex);
 }

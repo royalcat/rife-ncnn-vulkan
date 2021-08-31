@@ -6,11 +6,6 @@ project(rife-ncnn-vulkan)
 
 cmake_minimum_required(VERSION 3.9)
 
-set(CMAKE_BUILD_TYPE Release)
-
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -Ofast -flto")
-
-
 option(USE_SYSTEM_NCNN "build with system libncnn" OFF)
 option(USE_STATIC_MOLTENVK "link moltenvk static library" OFF)
 
@@ -51,6 +46,12 @@ if(ipo_supported)
     set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 else()
     message(WARNING "IPO is not supported: ${ipo_supported_output}")
+endif()
+
+include(CheckCXXCompilerFlag)
+CHECK_CXX_COMPILER_FLAG("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
+if(COMPILER_SUPPORTS_MARCH_NATIVE)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")
 endif()
 
 if(USE_SYSTEM_NCNN)
@@ -239,26 +240,25 @@ add_executable(rife-ncnn-vulkan
 
 add_dependencies(rife-ncnn-vulkan generate-spirv)
 
-
 target_link_libraries(rife-ncnn-vulkan ${RIFE_LINK_LIBRARIES})  
 
 
 
 #library
-add_library(rife-ncnn-vulkan-lib SHARED
+add_library(lib-rife-ncnn-vulkan SHARED
     lib.cpp
     main.cpp
     rife.cpp
     warp.cpp
 )
 
-set_target_properties(rife-ncnn-vulkan-lib PROPERTIES
+add_dependencies(lib-rife-ncnn-vulkan generate-spirv)
+
+set_target_properties(lib-rife-ncnn-vulkan PROPERTIES
         POSITION_INDEPENDENT_CODE ON
+        PREFIX ""  
     )
 
-target_link_libraries(rife-ncnn-vulkan-lib
+target_link_libraries(lib-rife-ncnn-vulkan
     ${RIFE_LINK_LIBRARIES}
 )
-
-
-add_dependencies(rife-ncnn-vulkan-lib generate-spirv)
